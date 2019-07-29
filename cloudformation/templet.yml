@@ -1,0 +1,84 @@
+
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  Subemail:
+    Type: "String"
+    AllowedPattern: '[^\s@]+@[^\s@]+\.[^\s@]+'
+    Default: jeevan.beniwal@quantiphi.com
+
+Resources:
+  #Cloudwatch
+  ScheduledRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: "Scheduled the triggering of lambda fucnction"
+      Name: "ScheduledRule"
+      RoleArn: "arn:aws:iam::488599217855:role/full_access"
+      ScheduleExpression: "cron(30 4 * * ? *)"
+      State: "ENABLED"
+
+#SNS Topic
+  MySnsTopic:
+      Type: 'AWS::SNS::Topic'
+      Properties: 
+        TopicName: "My_Topic"
+    #SNS Subscription
+  TopicSubscription:
+      Type: 'AWS::SNS::Subscription'
+      Properties:
+        TopicArn: !Ref MySnsTopic
+        Endpoint: !Ref Subemail
+        Protocol: email
+
+#Lambda Function
+  LambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties: 
+      Description: "send email to sns topic subscriber"
+      Environment:
+        Variables:
+          TopicArn: !Ref MySnsTopic
+      Handler: "lambda_handler"
+      code:
+        S3Bucket: "auto-s3bucket"
+        S3key: "lambda_auto.zip"
+      Role: "arn:aws:iam::488599217855:role/service-role/codebuild-lambda-pipeline-build-service-role"
+      Runtime: "python3.7"
+    DependsOn:
+      - ScheduledRule
+      - MySnsTopic
+#SNS Policy
+
+  SNSPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Id: "SNSPolicyId"
+        Version: '2012-10-17'
+        Statement:
+        - Sid: "sns"
+          Effect: "Allow"
+          Principal:
+            Fn::GetAtt: 
+              - "LambdaFunction"
+              - "Arn"
+          Action:
+            - sns:Publish
+          Resource: "*"
+      Topics:
+      - !Ref MySnsTopic 
+#Lambda Invoke Permisssion
+  LambdaInvokePermission:    
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !Ref LambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: "events.amazonaws.com"
+      sourceArn:
+        Fn::GetAtt:
+          - "ScheduledRule"
+          - "Arn"
+
+
+
+
